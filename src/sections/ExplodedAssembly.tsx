@@ -1,5 +1,5 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
+import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion'
 import type { MotionValue } from 'framer-motion'
 import { useMemo, useRef, useState } from 'react'
 import { MathUtils, Vector2 } from 'three'
@@ -92,9 +92,11 @@ export function ExplodedAssembly() {
   const reduceMotion = Boolean(useReducedMotion())
   const { scrollYProgress } = useScroll({ target: section, offset: ['start start', 'end end'] })
   const explodeProgress = useTransform(scrollYProgress, [0, .12, .88, 1], [0, .02, 1, 1])
+  const springExplodeProgress = useSpring(explodeProgress, { stiffness: 105, damping: 23, mass: .72 })
+  const springScrollProgress = useSpring(scrollYProgress, { stiffness: 105, damping: 23, mass: .72 })
   const stillProgress = useTransform(scrollYProgress, () => 0)
-  const sceneProgress = reduceMotion ? stillProgress : explodeProgress
-  const progressLabel = useTransform(explodeProgress, (value) => `OPEN ${Math.round(value * 100)}%`)
+  const sceneProgress = reduceMotion ? stillProgress : springExplodeProgress
+  const progressLabel = useTransform(springExplodeProgress, (value) => `OPEN ${Math.round(value * 100)}%`)
   const [selected, setSelected] = useState<PartId>('glass')
   const [assembled, setAssembled] = useState(false)
   const detail = parts.find((part) => part.id === selected) ?? parts[0]
@@ -108,7 +110,7 @@ export function ExplodedAssembly() {
       <div className="assembly-copy"><span className="eyebrow">EAU DE PARFUM · NO. 04</span><h2>A little<br/>closer to <em>essence.</em></h2><p>Scroll to reveal the bottle’s layers. Select a component to inspect it, then bring the fragrance back together.</p></div>
       <aside className="assembly-inspector"><span>COMPONENT / {detail.code}</span><h3>{detail.name}</h3><p>{detail.description}</p><div className="assembly-part-list">{parts.map((part) => <button key={part.id} className={part.id === selected ? 'active' : ''} onClick={() => setSelected(part.id)}><span>{part.code}</span>{part.name}<i>↗</i></button>)}</div></aside>
       <div className="assembly-controls"><motion.span className="assembly-scroll-label">{assembled ? 'BOTTLE RESTORED' : progressLabel}</motion.span><button onClick={() => setAssembled((value) => !value)}>{assembled ? 'Resume scroll reveal' : 'Reassemble bottle'} <b>{assembled ? '↗' : '↙'}</b></button></div>
-      <footer className="assembly-footer"><span>FOUR LAYERS · ONE SIGNATURE</span><div><motion.i style={{ scaleX: reduceMotion ? 0 : scrollYProgress, transformOrigin: 'left' }}/></div><span>GLASS · ESSENCE · ATOMIZER · BRASS</span></footer>
+      <footer className="assembly-footer"><span>FOUR LAYERS · ONE SIGNATURE</span><div><motion.i style={{ scaleX: reduceMotion ? 0 : springScrollProgress, transformOrigin: 'left' }}/></div><span>GLASS · ESSENCE · ATOMIZER · BRASS</span></footer>
     </div>
   </section>
 }
