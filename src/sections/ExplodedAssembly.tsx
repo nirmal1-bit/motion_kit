@@ -19,19 +19,24 @@ const bottleProfile = [
   new Vector2(.29, .62), new Vector2(.27, .88), new Vector2(.26, .96), new Vector2(0, .96),
 ]
 
-function AnimatedPart({ id, progress, assembled, selected, onSelect, position, offset, children }: {
+function AnimatedPart({ id, progress, assembled, selected, onSelect, position, offset, rotation = [0, 0, 0], start, end, children }: {
   id: PartId; progress: MotionValue<number>; assembled: boolean; selected: boolean; onSelect: (id: PartId) => void
-  position: readonly [number, number, number]; offset: readonly [number, number, number]; children: React.ReactNode
+  position: readonly [number, number, number]; offset: readonly [number, number, number]; rotation?: readonly [number, number, number]
+  start: number; end: number; children: React.ReactNode
 }) {
   const group = useRef<Group>(null)
   const target = useMemo(() => [position[0] + offset[0], position[1] + offset[1], position[2] + offset[2]], [position, offset])
+  const destinationRotation = useMemo(() => rotation, [rotation])
   useFrame((_, delta) => {
     if (!group.current) return
-    const raw = assembled ? 0 : progress.get()
+    const raw = assembled ? 0 : MathUtils.clamp((progress.get() - start) / (end - start), 0, 1)
     const amount = raw * raw * (3 - 2 * raw)
     group.current.position.x = MathUtils.damp(group.current.position.x, MathUtils.lerp(position[0], target[0], amount), 7, delta)
     group.current.position.y = MathUtils.damp(group.current.position.y, MathUtils.lerp(position[1], target[1], amount), 7, delta)
     group.current.position.z = MathUtils.damp(group.current.position.z, MathUtils.lerp(position[2], target[2], amount), 7, delta)
+    group.current.rotation.x = MathUtils.damp(group.current.rotation.x, destinationRotation[0] * amount, 6, delta)
+    group.current.rotation.y = MathUtils.damp(group.current.rotation.y, destinationRotation[1] * amount, 6, delta)
+    group.current.rotation.z = MathUtils.damp(group.current.rotation.z, destinationRotation[2] * amount, 6, delta)
     const scale = selected ? 1.035 : 1
     group.current.scale.setScalar(MathUtils.damp(group.current.scale.x, scale, 6, delta))
   })
@@ -39,37 +44,46 @@ function AnimatedPart({ id, progress, assembled, selected, onSelect, position, o
 }
 
 function BottleScene({ progress, assembled, selected, onSelect }: { progress: MotionValue<number>; assembled: boolean; selected: PartId; onSelect: (id: PartId) => void }) {
+  const bottle = useRef<Group>(null)
+  useFrame(({ clock }, delta) => {
+    if (!bottle.current) return
+    const reveal = progress.get()
+    bottle.current.rotation.y = MathUtils.damp(bottle.current.rotation.y, Math.sin(clock.elapsedTime * .24) * .055 + reveal * .08, 2.4, delta)
+    bottle.current.position.y = MathUtils.damp(bottle.current.position.y, Math.sin(clock.elapsedTime * .8) * .025, 2, delta)
+  })
   return <>
     <color attach="background" args={['#171c19']}/><fog attach="fog" args={['#171c19', 9, 23]}/>
-    <ambientLight intensity={.7}/><hemisphereLight args={['#f4ead8', '#202a24', 1.2]}/>
-    <directionalLight position={[4, 6, 5]} intensity={3.2} color="#fff1d8"/>
-    <pointLight position={[-2.5, 1.5, 2]} intensity={27} color="#eac07b" distance={8}/>
-    <pointLight position={[2.7, 2.5, -2]} intensity={30} color="#b3d2c8" distance={9}/>
-    <spotLight position={[0, 6, 3]} angle={.52} penumbra={.85} intensity={65} color="#f8edcc" distance={12}/>
-    <AnimatedPart id="glass" progress={progress} assembled={assembled} selected={selected === 'glass'} onSelect={onSelect} position={[0, 0, 0]} offset={[-.75, 0, 0]}>
-      <mesh castShadow receiveShadow><latheGeometry args={[bottleProfile, 72]}/><meshPhysicalMaterial color={selected === 'glass' ? '#cfe7d4' : '#9ebbb0'} roughness={.08} metalness={.05} transmission={.94} thickness={.32} ior={1.46} transparent opacity={.42} side={2}/></mesh>
-      <mesh position={[0, -.89, 0]}><torusGeometry args={[.54, .035, 16, 72]}/><meshStandardMaterial color="#d9e2d4" metalness={.5} roughness={.2}/></mesh>
-      <mesh position={[0, .25, .681]}><planeGeometry args={[.75, .48]}/><meshStandardMaterial color="#ede5d2" roughness={.65}/></mesh>
-      <mesh position={[0, .25, .695]}><planeGeometry args={[.69, .42]}/><meshStandardMaterial color="#28332c" roughness={.72}/></mesh>
-      <mesh position={[0, .25, .708]}><planeGeometry args={[.018, .31]}/><meshStandardMaterial color="#c3a66b" metalness={.7} roughness={.25}/></mesh>
-    </AnimatedPart>
-    <AnimatedPart id="essence" progress={progress} assembled={assembled} selected={selected === 'essence'} onSelect={onSelect} position={[0, 0, 0]} offset={[0, -1.18, 0]}>
-      <mesh position={[0, -.35, 0]}><cylinderGeometry args={[.535, .57, .92, 64]}/><meshPhysicalMaterial color="#b67336" roughness={.18} metalness={.08} transparent opacity={.84} transmission={.08}/></mesh>
-      <mesh position={[0, .12, 0]}><cylinderGeometry args={[.52, .52, .035, 64]}/><meshStandardMaterial color="#d8a35d" roughness={.2} metalness={.2}/></mesh>
-    </AnimatedPart>
-    <AnimatedPart id="atomizer" progress={progress} assembled={assembled} selected={selected === 'atomizer'} onSelect={onSelect} position={[0, .92, 0]} offset={[1.18, .38, .05]}>
-      <mesh><cylinderGeometry args={[.25, .25, .15, 48]}/><meshStandardMaterial color="#c9a76a" metalness={.78} roughness={.22}/></mesh>
-      <mesh position={[0, -.37, 0]}><cylinderGeometry args={[.035, .035, .62, 20]}/><meshStandardMaterial color="#d6d0bd" metalness={.45} roughness={.24}/></mesh>
-      <mesh position={[0, .15, 0]}><cylinderGeometry args={[.075, .09, .19, 24]}/><meshStandardMaterial color="#e3d5b2" metalness={.62} roughness={.2}/></mesh>
-      <mesh position={[.15, .22, 0]} rotation={[0, 0, -Math.PI / 2]}><cylinderGeometry args={[.055, .07, .32, 24]}/><meshStandardMaterial color="#d9d3c1" metalness={.55} roughness={.2}/></mesh>
-      <mesh position={[.31, .22, 0]} rotation={[0, 0, -Math.PI / 2]}><cylinderGeometry args={[.045, .045, .035, 24]}/><meshStandardMaterial color="#292f2a" roughness={.3}/></mesh>
-    </AnimatedPart>
-    <AnimatedPart id="cap" progress={progress} assembled={assembled} selected={selected === 'cap'} onSelect={onSelect} position={[0, 1.06, 0]} offset={[0, 1.35, 0]}>
-      <mesh castShadow><cylinderGeometry args={[.31, .31, .72, 64, 1]}/><meshStandardMaterial color="#b89b65" metalness={.82} roughness={.25}/></mesh>
-      <mesh position={[0, -.36, 0]}><torusGeometry args={[.28, .028, 14, 64]}/><meshStandardMaterial color="#ead8aa" metalness={.78} roughness={.2}/></mesh>
-      <mesh position={[0, .34, 0]}><cylinderGeometry args={[.29, .31, .045, 64]}/><meshStandardMaterial color="#d1b577" metalness={.8} roughness={.22}/></mesh>
-    </AnimatedPart>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.12, 0]} receiveShadow><planeGeometry args={[100, 100]}/><shadowMaterial transparent opacity={.28}/></mesh>
+    <ambientLight intensity={.42}/><hemisphereLight args={['#fff1d6', '#17251f', 1.35]}/>
+    <directionalLight position={[4, 6, 5]} intensity={3.8} color="#fff0d4"/>
+    <pointLight position={[-2.5, 1.5, 2]} intensity={33} color="#f0b765" distance={8}/>
+    <pointLight position={[2.7, 2.5, -2]} intensity={38} color="#a8e0ce" distance={9}/>
+    <spotLight position={[0, 6, 3]} angle={.52} penumbra={.8} intensity={72} color="#fff4d9" distance={12}/>
+    <group ref={bottle}>
+      <AnimatedPart id="glass" progress={progress} assembled={assembled} selected={selected === 'glass'} onSelect={onSelect} position={[0, 0, 0]} offset={[-.66, -.02, .05]} start={.37} end={.86}>
+        <mesh castShadow receiveShadow><latheGeometry args={[bottleProfile, 96]}/><meshPhysicalMaterial color={selected === 'glass' ? '#d3f0df' : '#a8d4c1'} roughness={.055} metalness={.02} transmission={.96} thickness={.55} ior={1.48} side={2}/></mesh>
+        <mesh position={[0, -.89, 0]}><torusGeometry args={[.55, .045, 20, 96]}/><meshStandardMaterial color="#d6eee0" metalness={.42} roughness={.16}/></mesh>
+        <mesh position={[0, .25, .681]}><planeGeometry args={[.75, .48]}/><meshStandardMaterial color="#e8d8b5" roughness={.72}/></mesh>
+        <mesh position={[0, .25, .695]}><planeGeometry args={[.69, .42]}/><meshStandardMaterial color="#30483c" roughness={.7}/></mesh>
+        <mesh position={[0, .25, .708]}><planeGeometry args={[.018, .31]}/><meshStandardMaterial color="#e5bf72" metalness={.68} roughness={.2}/></mesh>
+      </AnimatedPart>
+      <AnimatedPart id="essence" progress={progress} assembled={assembled} selected={selected === 'essence'} onSelect={onSelect} position={[0, 0, 0]} offset={[0, -1.12, 0]} start={.23} end={.7}>
+        <mesh position={[0, -.35, 0]}><cylinderGeometry args={[.535, .57, .92, 72]}/><meshPhysicalMaterial color={selected === 'essence' ? '#f4a94d' : '#c7792f'} roughness={.2} metalness={.02} transparent opacity={.88} transmission={.12}/></mesh>
+        <mesh position={[0, .12, 0]}><cylinderGeometry args={[.52, .52, .035, 72]}/><meshStandardMaterial color="#f0b55d" roughness={.24} metalness={.12}/></mesh>
+      </AnimatedPart>
+      <AnimatedPart id="atomizer" progress={progress} assembled={assembled} selected={selected === 'atomizer'} onSelect={onSelect} position={[0, .92, 0]} offset={[1.12, .4, .08]} rotation={[.05, .12, -.12]} start={.12} end={.59}>
+        <mesh><cylinderGeometry args={[.25, .25, .15, 48]}/><meshStandardMaterial color="#ddbd79" metalness={.72} roughness={.22}/></mesh>
+        <mesh position={[0, -.37, 0]}><cylinderGeometry args={[.035, .035, .62, 20]}/><meshStandardMaterial color="#d4e3dc" metalness={.42} roughness={.2}/></mesh>
+        <mesh position={[0, .15, 0]}><cylinderGeometry args={[.075, .09, .19, 24]}/><meshStandardMaterial color="#f1dfb6" metalness={.56} roughness={.18}/></mesh>
+        <mesh position={[.15, .22, 0]} rotation={[0, 0, -Math.PI / 2]}><cylinderGeometry args={[.055, .07, .32, 24]}/><meshStandardMaterial color="#f1dfb6" metalness={.55} roughness={.18}/></mesh>
+        <mesh position={[.31, .22, 0]} rotation={[0, 0, -Math.PI / 2]}><cylinderGeometry args={[.045, .045, .035, 24]}/><meshStandardMaterial color="#26382f" roughness={.28}/></mesh>
+      </AnimatedPart>
+      <AnimatedPart id="cap" progress={progress} assembled={assembled} selected={selected === 'cap'} onSelect={onSelect} position={[0, 1.06, 0]} offset={[-.04, 1.25, -.02]} rotation={[.08, -.08, .035]} start={.02} end={.43}>
+        <mesh castShadow><cylinderGeometry args={[.31, .31, .72, 64, 1]}/><meshStandardMaterial color={selected === 'cap' ? '#f1d490' : '#c9a65f'} metalness={.76} roughness={.24}/></mesh>
+        <mesh position={[0, -.36, 0]}><torusGeometry args={[.28, .028, 14, 64]}/><meshStandardMaterial color="#f2d797" metalness={.72} roughness={.18}/></mesh>
+        <mesh position={[0, .34, 0]}><cylinderGeometry args={[.29, .31, .045, 64]}/><meshStandardMaterial color="#d9ba75" metalness={.76} roughness={.2}/></mesh>
+      </AnimatedPart>
+    </group>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.13, 0]} receiveShadow><planeGeometry args={[100, 100]}/><shadowMaterial transparent opacity={.34}/></mesh>
   </>
 }
 
@@ -77,7 +91,7 @@ export function ExplodedAssembly() {
   const section = useRef<HTMLElement>(null)
   const reduceMotion = Boolean(useReducedMotion())
   const { scrollYProgress } = useScroll({ target: section, offset: ['start start', 'end end'] })
-  const explodeProgress = useTransform(scrollYProgress, [0, .14, .72, 1], [0, .04, 1, 1])
+  const explodeProgress = useTransform(scrollYProgress, [0, .12, .88, 1], [0, .02, 1, 1])
   const stillProgress = useTransform(scrollYProgress, () => 0)
   const sceneProgress = reduceMotion ? stillProgress : explodeProgress
   const progressLabel = useTransform(explodeProgress, (value) => `OPEN ${Math.round(value * 100)}%`)
