@@ -48,7 +48,7 @@ function BottleScene({ progress, assembled, selected, onSelect }: { progress: Mo
   useFrame(({ clock }, delta) => {
     if (!bottle.current) return
     const reveal = progress.get()
-    bottle.current.rotation.y = MathUtils.damp(bottle.current.rotation.y, Math.sin(clock.elapsedTime * .24) * .055 + reveal * .08, 2.4, delta)
+    bottle.current.rotation.y = MathUtils.damp(bottle.current.rotation.y, Math.sin(clock.elapsedTime * .24) * .035 + reveal * Math.PI * 2, 3.2, delta)
     bottle.current.position.y = MathUtils.damp(bottle.current.position.y, Math.sin(clock.elapsedTime * .8) * .025, 2, delta)
   })
   return <>
