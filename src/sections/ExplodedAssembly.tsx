@@ -88,14 +88,11 @@ function ImportedCar({ progress, assembled, selected, onSelect, onLoad }: { prog
 class ModelErrorBoundary extends Component<{ children: ReactNode; onFail: () => void }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
-  componentDidCatch(error: Error, _info: ErrorInfo) { console.error('Unable to load the Electric GT model.', error) }
-  render() {
-    if (this.state.failed) return <div className="assembly-model-fallback" role="status">
-      <svg viewBox="0 0 900 360" aria-hidden="true"><defs><linearGradient id="carPaint" x1="0" x2="1" y1="0" y2="1"><stop stopColor="#c8d7a2"/><stop offset=".52" stopColor="#748665"/><stop offset="1" stopColor="#34443a"/></linearGradient></defs><ellipse cx="450" cy="295" rx="360" ry="26" fill="#090d0b" opacity=".3"/><path d="M108 234l45-79c15-25 35-39 66-47l118-31c36-9 70-13 107-13h105c43 0 76 11 110 39l75 62 39 23 18 58-45 23H151l-43-20z" fill="url(#carPaint)" stroke="#e0e8c5" strokeOpacity=".45" strokeWidth="3"/><path d="M248 154l126-47c28-9 54-13 85-13h84c32 0 57 8 82 28l52 44H248z" fill="#243532" stroke="#d1dbbd" strokeOpacity=".65" strokeWidth="3"/><path d="M408 97v69m-159-12h428" fill="none" stroke="#d1dbbd" strokeOpacity=".4" strokeWidth="3"/><path d="M129 211l90 1m553 0l66 1" stroke="#f5e4aa" strokeWidth="8" strokeLinecap="round"/><circle cx="257" cy="255" r="55" fill="#151a18"/><circle cx="257" cy="255" r="29" fill="#aeb99a"/><circle cx="257" cy="255" r="11" fill="#3d493e"/><circle cx="665" cy="255" r="55" fill="#151a18"/><circle cx="665" cy="255" r="29" fill="#aeb99a"/><circle cx="665" cy="255" r="11" fill="#3d493e"/></svg>
-      <span>3D model unavailable · showing vehicle preview</span>
-    </div>
-    return this.props.children
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    console.error('Unable to load the Electric GT model.', error)
+    this.props.onFail()
   }
+  render() { return this.state.failed ? null : this.props.children }
 }
 
 function ModelFallback() {
@@ -119,7 +116,7 @@ export function ExplodedAssembly() {
     <div className="assembly-stage">
       <Canvas shadows camera={{ position: [5.1, 3.2, 7.3], fov: 38 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
         <color attach="background" args={['#151b19']}/><fog attach="fog" args={['#151b19', 13, 32]}/><directionalLight position={[-5, 4, -4]} intensity={1.8} color="#b4c8e4"/><pointLight position={[0, 4, 0]} intensity={16} color="#d7f36c" distance={14}/>
-        <ModelErrorBoundary onFail={() => setModelUnavailable(true)}><ModelErrorBoundary onFail={() => setModelUnavailable(true)}><Suspense fallback={null}><ImportedCar progress={sceneProgress} assembled={assembled || reduceMotion} selected={selected} onSelect={setSelected} onLoad={() => setModelLoaded(true)}/></Suspense></ModelErrorBoundary></ModelErrorBoundary>
+        <ModelErrorBoundary onFail={() => setModelUnavailable(true)}><Suspense fallback={null}><ImportedCar progress={sceneProgress} assembled={assembled || reduceMotion} selected={selected} onSelect={setSelected} onLoad={() => setModelLoaded(true)}/></Suspense></ModelErrorBoundary>
       </Canvas>
       {!modelLoaded && !modelUnavailable && <div className="assembly-model-loader"><i/>Loading vehicle model</div>}
       {modelUnavailable && <ModelFallback/>}
