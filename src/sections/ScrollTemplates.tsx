@@ -1,5 +1,5 @@
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { PageTransition } from './PageTransition'
 import { ImageHoverReveal } from './ImageHoverReveal'
 import { AnimatedMenu } from './AnimatedMenu'
@@ -20,6 +20,18 @@ import { ParticleField } from './ParticleField'
 import { GsapScene } from './GsapScene'
 import { ThreeScene } from './ThreeScene'
 import { BasicMotion } from './BasicMotion'
+import { CameraPathStory } from './CameraPathStory'
+import { FirstPersonWalk } from './FirstPersonWalk'
+import { DioramaParallax } from './DioramaParallax'
+import { PortalWorlds } from './PortalWorlds'
+import { OrbitEditorial } from './OrbitEditorial'
+import { CameraRollTransition } from './CameraRollTransition'
+import { TopDownReveal } from './TopDownReveal'
+import { ArchitecturalFlythrough } from './ArchitecturalFlythrough'
+import { MapRouteJourney } from './MapRouteJourney'
+import { DayNightTransition } from './DayNightTransition'
+import { ScaleShiftJourney } from './ScaleShiftJourney'
+import { TypographyCameraMove } from './TypographyCameraMove'
 
 const foldCards = [
   { kicker: 'SCROLL PATTERN / 01', title: 'Stack, then unfold.', detail: 'A pinned card stack that releases one layer at a time.', color: 'fold-card-green' },
@@ -98,7 +110,20 @@ function OrbitCard({ name, index, progress }: { name: string; index: number; pro
   return <motion.article className={`orbit-card orbit-card-${index + 1}`} style={{ x, rotate, scale, opacity, zIndex: 3 - index }}><span>ORBIT / 0{index + 1}</span><b>{name}</b><i>✳</i></motion.article>
 }
 
+// Keep the newest implementation first; library and filtered category views preserve this order.
 export const templates = [
+  { id: 'typography-camera-move', number: '39', name: 'Camera move through typography', description: 'Fly through four giant extruded letters and arrive at the next editorial frame.', technique: 'THREE.JS · TYPE / CAMERA', color: 'template-row-green' },
+  { id: 'scale-shift-journey', number: '40', name: 'Scale-shift journey', description: 'Pull back from a mineral surface to reveal the same stone in a pavilion and highland landscape.', technique: 'THREE.JS · SCALE / SCENE', color: 'template-row-peach' },
+  { id: 'day-night-transition', number: '41', name: 'Day-to-night world transition', description: 'Watch one city street move from high sun through blue hour into a softly lit night.', technique: 'THREE.JS · LIGHT / ATMOSPHERE', color: 'template-row-lilac' },
+  { id: 'map-route-journey', number: '42', name: '3D map route journey', description: 'Follow a glowing trail across raised highland terrain as the camera drops from map view to the lookout.', technique: 'THREE.JS · TERRAIN / CAMERA', color: 'template-row-green' },
+  { id: 'architectural-flythrough', number: '43', name: 'Architectural fly-through', description: 'Follow a guided camera through a stone gallery, pausing at works before opening into a quiet courtyard.', technique: 'THREE.JS · ARCHITECTURE / CAMERA', color: 'template-row-peach' },
+  { id: 'topdown-reveal', number: '44', name: 'Top-down to ground-level reveal', description: 'Lower the camera from a map-like plan into the streets and buildings below.', technique: 'THREE.JS · CAMERA DESCENT', color: 'template-row-green' },
+  { id: 'camera-roll', number: '45', name: 'Camera roll into a new section', description: 'A scroll-driven camera roll and dolly carries the story through a threshold into a new world.', technique: 'THREE.JS · ROLL / DOLLY', color: 'template-row-peach' },
+  { id: 'orbit-editorial', number: '46', name: 'Camera orbit around editorial copy', description: 'A camera circles a sculptural form as three editorial chapters move through depth.', technique: 'THREE.JS · CAMERA / TYPE', color: 'template-row-green' },
+  { id: 'portal-worlds', number: '47', name: 'Portal between worlds', description: 'Scroll through a glowing threshold as the world, palette, and light change around you.', technique: 'THREE.JS · PORTAL / SCROLL', color: 'template-row-lilac' },
+  { id: 'diorama-parallax', number: '48', name: 'Diorama parallax', description: 'Pointer movement shifts a miniature landscape at different depths for a layered parallax effect.', technique: 'THREE.JS · DEPTH / POINTER', color: 'template-row-peach' },
+  { id: 'first-person-walk', number: '49', name: 'First-person scene walk', description: 'Explore a small portfolio gallery, then inspect projects as you approach them.', technique: 'THREE.JS · FIRST PERSON', color: 'template-row-green' },
+  { id: 'camera-story', number: '50', name: 'Continuous camera-path story', description: 'Scrub a camera along one continuous path through three connected 3D chapters.', technique: 'THREE.JS · SCROLL CAMERA', color: 'template-row-lilac' },
   { id: 'three-scene', number: '26', name: 'Interactive 3D sculpture', description: 'Orbit a softly lit procedural sculpture in a real-time Three.js canvas.', technique: 'THREE.JS · ORBIT CONTROLS', color: 'template-row-lilac' },
   { id: 'gsap', number: '25', name: 'GSAP timeline loop', description: 'A scoped timeline loops a shape transformation and a moving signal.', technique: 'GSAP · TIMELINE / EASING', color: 'template-row-green' },
   { id: 'basic', number: '24', name: 'Basic interaction states', description: 'A small set of hover, press, and selected states built with CSS.', technique: 'CSS · HOVER / PRESS', color: 'template-row-peach' },
@@ -127,11 +152,42 @@ export const templates = [
   { id: 'orbit', number: '06', name: 'Orbiting card gallery', description: 'Scroll moves a sequence of cards around a central focal point.', technique: '3D SPACE · CARD ORBIT', color: 'template-row-peach' },
 ]
 
+function makeRecreationPrompt(template: (typeof templates)[number]) {
+  return `Recreate the “${template.name}” animation from the animation_template library in the current product codebase.
+
+Reference: In the animation_template project, open the animation library entry “${template.name}” (id: ${template.id}) and inspect its rendered full-screen demo and source implementation in src/sections/ScrollTemplates.tsx and any component imported for this entry. Treat that implementation as the source of truth.
+
+Effect: ${template.description}
+Technique: ${template.technique}
+
+Match the reference closely: preserve the composition, layers, scroll trigger/pinning behavior, motion direction, transform ranges, timing/easing, typography hierarchy, colors, spacing, and progress indicators. Reuse the same animation logic and values where practical. Replace only product-specific copy, images, and colors needed to fit the host product; keep the visual structure and animation behavior intact.
+
+Implement it as a self-contained, reusable React + TypeScript component that fits the host project's existing stack and conventions. Keep the animation tied to scroll progress where shown, avoid scroll hijacking, support touch-sized layouts, and respect prefers-reduced-motion with a stable non-animated presentation. Include any required styles, clean up listeners/animation contexts, and make the result usable in a real product page. Do not substitute a generic fade/slide for the demonstrated effect.
+
+Before finishing, compare the result side by side with the reference demo and tune it until the behavior and composition match.`
+}
+
+export function CopyPromptButton({ template, compact = false }: { template: (typeof templates)[number]; compact?: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(makeRecreationPrompt(template))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setCopied(false)
+    }
+  }
+  return <motion.button className={compact ? 'copy-prompt compact' : 'copy-prompt'} onClick={copy} whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: .96 }} transition={{ type: 'spring', stiffness: 360, damping: 20 }} aria-label={`Copy recreation prompt for ${template.name}`}>
+    <span className="copy-prompt-icon">{copied ? '✓' : '⧉'}</span><span>{copied ? 'Prompt copied' : compact ? 'Copy prompt' : 'Copy recreation prompt'}</span><span className="copy-prompt-arrow">{copied ? '' : '↗'}</span>
+  </motion.button>
+}
+
 export function ScrollTemplates({ onOpen }: { onOpen: (id: string) => void }) {
-  const featured = templates.filter((template) => ['three-scene', 'morph', 'gsap'].includes(template.id))
+  const featured = templates
   return <section className="scroll-templates" id="scroll-animations">
     <div className="scroll-intro wrap"><div className="eyebrow">ANIMATION LIBRARY</div><h2>Find the motion<br/><em>that fits your stack.</em></h2><p>Browse focused examples by tool, from simple interface states to scroll-driven 3D scenes.</p><a className="primary-link" href="#animations/all">Browse all animations <span>↗</span></a></div>
-    <div className="template-list wrap">{featured.map((template) => <button className={`template-row ${template.color}`} key={template.id} onClick={() => onOpen(template.id)}><span className="template-row-number">{template.number}</span><span className="template-row-copy"><span className="template-tech">{template.technique}</span><strong>{template.name}</strong><small>{template.description}</small></span><span className="template-row-action">OPEN REVEAL <b>↗</b></span></button>)}</div>
+    <div className="template-list wrap">{featured.map((template) => <motion.article className={`template-row ${template.color}`} key={template.id} whileHover={{ y: -3 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }}><span className="template-row-number">{template.number}</span><span className="template-row-copy"><span className="template-tech">{template.technique}</span><strong>{template.name}</strong><small>{template.description}</small></span><motion.span className="template-row-art" aria-hidden="true" whileHover={{ rotate: 8, scale: 1.08 }}><i/><i/><i/></motion.span><span className="template-row-actions"><motion.button className="template-row-action" onClick={() => onOpen(template.id)} whileHover={{ x: 4 }} whileTap={{ scale: .96 }}>Open reveal <b>↗</b></motion.button><CopyPromptButton template={template} compact/></span></motion.article>)}</div>
   </section>
 }
 
@@ -147,10 +203,11 @@ function ParallaxFull() {
 export function ScrollTemplateDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const template = templates.find((item) => item.id === id) ?? templates[0]
   const { scrollYProgress: pageProgress } = useScroll()
-  const visual = id === 'basic' ? <BasicMotion/> : id === 'three-scene' ? <ThreeScene/> : id === 'gsap' ? <GsapScene/> : id === 'particles' ? <ParticleField/> : id === 'configurator' ? <ProductConfigurator/> : id === 'lens' ? <RefractionLens/> : id === 'webgl-transition' ? <WebGLTransition/> : id === 'morph' ? <ScrollMorph/> : id === 'momentum' ? <DraggableMomentum/> : id === 'text-mask' ? <TextMaskReveal/> : id === 'panels' ? <StickyPanels/> : id === 'story' ? <PinnedStory/> : id === 'sequence' ? <ScrollImageSequence/> : id === 'layout' ? <SharedLayout/> : id === 'loader' ? <LoaderToHero/> : id === 'svg-draw' ? <SvgLineDrawing/> : id === 'magnetic' ? <MagneticCursor/> : id === 'menu' ? <AnimatedMenu/> : id === 'image-hover' ? <ImageHoverReveal/> : id === 'transition' ? <PageTransition/> : id === 'fold' ? <FoldStack/> : id === 'rail' ? <HorizontalRail/> : id === 'parallax' ? <ParallaxFull/> : id === 'text' ? <WordReveal/> : id === 'zoom' ? <ZoomReveal/> : <OrbitGallery/>
+  const visual = id === 'typography-camera-move' ? <TypographyCameraMove/> : id === 'scale-shift-journey' ? <ScaleShiftJourney/> : id === 'day-night-transition' ? <DayNightTransition/> : id === 'map-route-journey' ? <MapRouteJourney/> : id === 'architectural-flythrough' ? <ArchitecturalFlythrough/> : id === 'topdown-reveal' ? <TopDownReveal/> : id === 'camera-roll' ? <CameraRollTransition/> : id === 'orbit-editorial' ? <OrbitEditorial/> : id === 'portal-worlds' ? <PortalWorlds/> : id === 'diorama-parallax' ? <DioramaParallax/> : id === 'first-person-walk' ? <FirstPersonWalk/> : id === 'camera-story' ? <CameraPathStory/> : id === 'basic' ? <BasicMotion/> : id === 'three-scene' ? <ThreeScene/> : id === 'gsap' ? <GsapScene/> : id === 'particles' ? <ParticleField/> : id === 'configurator' ? <ProductConfigurator/> : id === 'lens' ? <RefractionLens/> : id === 'webgl-transition' ? <WebGLTransition/> : id === 'morph' ? <ScrollMorph/> : id === 'momentum' ? <DraggableMomentum/> : id === 'text-mask' ? <TextMaskReveal/> : id === 'panels' ? <StickyPanels/> : id === 'story' ? <PinnedStory/> : id === 'sequence' ? <ScrollImageSequence/> : id === 'layout' ? <SharedLayout/> : id === 'loader' ? <LoaderToHero/> : id === 'svg-draw' ? <SvgLineDrawing/> : id === 'magnetic' ? <MagneticCursor/> : id === 'menu' ? <AnimatedMenu/> : id === 'image-hover' ? <ImageHoverReveal/> : id === 'transition' ? <PageTransition/> : id === 'fold' ? <FoldStack/> : id === 'rail' ? <HorizontalRail/> : id === 'parallax' ? <ParallaxFull/> : id === 'text' ? <WordReveal/> : id === 'zoom' ? <ZoomReveal/> : <OrbitGallery/>
   return <main className={`scroll-detail-page detail-${id}`}>
     <div className="detail-fullstage">{visual}</div>
     <button className="immersive-back" onClick={onBack}><span>←</span> BACK TO ANIMATION LIBRARY</button>
+    <CopyPromptButton template={template}/>
     <div className="immersive-title"><span>{template.number} / {template.technique}</span><h1>{template.name}</h1></div>
     <div className="immersive-scroll-hint"><span>SCROLL TO EXPERIENCE</span><b>↓</b></div>
     <div className="immersive-progress"><motion.i style={{ scaleX: pageProgress, transformOrigin: 'left' }}/></div>
