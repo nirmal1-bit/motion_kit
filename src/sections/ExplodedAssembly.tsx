@@ -1,131 +1,100 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Center, RoundedBox, useGLTF } from '@react-three/drei'
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import type { MotionValue } from 'framer-motion'
-import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { MathUtils, Vector3 } from 'three'
-import type { Object3D } from 'three'
-import type { ErrorInfo, ReactNode } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { MathUtils, Vector2 } from 'three'
+import type { Group } from 'three'
 
-const MODEL_URL = 'https://tevy.dev/models/electric-gt/v1/lod1.glb'
 const parts = [
-  { id: 'body', name: 'Grand touring body', description: 'A sculpted electric coupe shell, finished in a deep mineral green with a low, aerodynamic profile.', code: '01' },
-  { id: 'battery', name: 'Skateboard battery', description: 'A structural battery pack sits low beneath the cabin to keep weight balanced and the floor flat.', code: '02' },
-  { id: 'wheels', name: 'Independent wheel units', description: 'Four precision wheel assemblies move outward to reveal the stance, hubs, and braking geometry.', code: '03' },
-  { id: 'spoiler', name: 'Active rear aero', description: 'The rear wing lifts clear of the tail to show how the coupe manages airflow at speed.', code: '04' },
+  { id: 'glass', name: 'Hand-blown glass', description: 'A softly weighted vessel with thick glass at the base and a clear, curved shoulder.', code: '01' },
+  { id: 'essence', name: 'Amber essence', description: 'The warm-toned fragrance sits inside the clear vessel, visible through the glass.', code: '02' },
+  { id: 'atomizer', name: 'Precision atomizer', description: 'A fine-mist pump lifts from the neck, revealing its collar, stem, and nozzle.', code: '03' },
+  { id: 'cap', name: 'Brushed brass cap', description: 'A satin-metal cap protects the sprayer and completes the bottle silhouette.', code: '04' },
 ] as const
 
 type PartId = (typeof parts)[number]['id']
-type MovingNode = { object: Object3D; origin: Vector3; offset: Vector3; category: PartId }
+const bottleProfile = [
+  new Vector2(0, -.98), new Vector2(.48, -.98), new Vector2(.63, -.93), new Vector2(.68, -.82),
+  new Vector2(.68, -.32), new Vector2(.66, .12), new Vector2(.61, .36), new Vector2(.47, .52),
+  new Vector2(.29, .62), new Vector2(.27, .88), new Vector2(.26, .96), new Vector2(0, .96),
+]
 
-function ImportedCar({ progress, assembled, selected, onSelect, onLoad }: { progress: MotionValue<number>; assembled: boolean; selected: PartId; onSelect: (id: PartId) => void; onLoad: () => void }) {
-  const root = useRef<Object3D>(null)
-  const battery = useRef<Object3D>(null)
-  const { scene } = useGLTF(MODEL_URL)
-  useEffect(() => onLoad(), [onLoad])
-  const model = useMemo(() => {
-    const clone = scene.clone(true)
-    const movingNodes: MovingNode[] = []
-    clone.traverse((node) => {
-      const name = node.name.toLowerCase()
-      const category: PartId | null = /wheel_(fl|fr|rl|rr)|wheel.?[0-9]/.test(name) ? 'wheels' : /spoiler|rear.?wing/.test(name) ? 'spoiler' : null
-      const mesh = node as Object3D & { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }
-      if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true }
-      if (category) {
-        const isLeft = /_(fl|rl)$/.test(name)
-        const isFront = /_(fl|fr)$/.test(name)
-        const signX = isLeft ? -1 : 1
-        const signZ = isFront ? 1 : -1
-        movingNodes.push({
-          object: node,
-          origin: node.position.clone(),
-          offset: category === 'wheels' ? new Vector3(signX * .72, .2, signZ * .32) : new Vector3(0, .85, -.12),
-          category,
-        })
-      }
-    })
-    return { scene: clone, movingNodes }
-  }, [scene])
-
-  useFrame(({ camera }, delta) => {
-    const t = progress.get()
-    const rawAmount = assembled ? 0 : t
-    const amount = rawAmount * rawAmount * (3 - 2 * rawAmount)
-    if (root.current) root.current.rotation.y = MathUtils.damp(root.current.rotation.y, -.22 + t * .44, 2.3, delta)
-    for (const part of model.movingNodes) {
-      const destination = part.origin.clone().addScaledVector(part.offset, amount)
-      part.object.position.lerp(destination, 1 - Math.exp(-delta * 7))
-    }
-    if (battery.current) {
-      const rawAmountDown = assembled ? 0 : t
-      const amountDown = rawAmountDown * rawAmountDown * (3 - 2 * rawAmountDown)
-      battery.current.position.y = MathUtils.damp(battery.current.position.y, -.42 - amountDown * .95, 6, delta)
-      battery.current.scale.setScalar(MathUtils.damp(battery.current.scale.x, selected === 'battery' ? 1.07 : 1, 6, delta))
-    }
-    camera.position.x = MathUtils.damp(camera.position.x, 5.1 - t * 1.3, 2, delta)
-    camera.position.z = MathUtils.damp(camera.position.z, 7.3 + t * .35, 2, delta)
-    camera.lookAt(0, .12, 0)
+function AnimatedPart({ id, progress, assembled, selected, onSelect, position, offset, children }: {
+  id: PartId; progress: MotionValue<number>; assembled: boolean; selected: boolean; onSelect: (id: PartId) => void
+  position: readonly [number, number, number]; offset: readonly [number, number, number]; children: React.ReactNode
+}) {
+  const group = useRef<Group>(null)
+  const target = useMemo(() => [position[0] + offset[0], position[1] + offset[1], position[2] + offset[2]], [position, offset])
+  useFrame((_, delta) => {
+    if (!group.current) return
+    const raw = assembled ? 0 : progress.get()
+    const amount = raw * raw * (3 - 2 * raw)
+    group.current.position.x = MathUtils.damp(group.current.position.x, MathUtils.lerp(position[0], target[0], amount), 7, delta)
+    group.current.position.y = MathUtils.damp(group.current.position.y, MathUtils.lerp(position[1], target[1], amount), 7, delta)
+    group.current.position.z = MathUtils.damp(group.current.position.z, MathUtils.lerp(position[2], target[2], amount), 7, delta)
+    const scale = selected ? 1.035 : 1
+    group.current.scale.setScalar(MathUtils.damp(group.current.scale.x, scale, 6, delta))
   })
+  return <group ref={group} position={position} onPointerDown={(event) => { event.stopPropagation(); onSelect(id) }} onPointerOver={() => { document.body.style.cursor = 'pointer' }} onPointerOut={() => { document.body.style.cursor = '' }}>{children}</group>
+}
 
-  const selectFromObject = (object: Object3D) => {
-    const name = object.name.toLowerCase()
-    onSelect(/wheel/.test(name) ? 'wheels' : /spoiler|rear.?wing/.test(name) ? 'spoiler' : 'body')
-  }
-
+function BottleScene({ progress, assembled, selected, onSelect }: { progress: MotionValue<number>; assembled: boolean; selected: PartId; onSelect: (id: PartId) => void }) {
   return <>
-    <ambientLight intensity={.72}/><hemisphereLight args={['#e8f0e4', '#1e2924', 1.2]}/><directionalLight position={[4, 8, 6]} intensity={3.1} color="#fff1d7" castShadow/><pointLight position={[-4, 2, -3]} intensity={22} color="#b8d5b8" distance={12}/>
-    <group ref={root}>
-      <Center><primitive object={model.scene} onPointerDown={(event: { stopPropagation: () => void; object: Object3D }) => { event.stopPropagation(); selectFromObject(event.object) }} /></Center>
-      <group ref={battery} position={[0, -.42, 0]} onPointerDown={(event) => { event.stopPropagation(); onSelect('battery') }}>
-        <RoundedBox args={[1.48, .17, 2.85]} radius={.07} smoothness={4} castShadow><meshStandardMaterial color={selected === 'battery' ? '#d7f36c' : '#737c68'} metalness={.62} roughness={.34}/></RoundedBox>
-        <mesh position={[0, .095, 0]}><boxGeometry args={[1.25, .025, 2.5]}/><meshStandardMaterial color="#d2c29a" metalness={.72} roughness={.3}/></mesh>
-      </group>
-    </group>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -.8, 0]} receiveShadow><planeGeometry args={[200, 200]}/><shadowMaterial transparent opacity={.18}/></mesh>
+    <color attach="background" args={['#171c19']}/><fog attach="fog" args={['#171c19', 9, 23]}/>
+    <ambientLight intensity={.7}/><hemisphereLight args={['#f4ead8', '#202a24', 1.2]}/>
+    <directionalLight position={[4, 6, 5]} intensity={3.2} color="#fff1d8"/>
+    <pointLight position={[-2.5, 1.5, 2]} intensity={27} color="#eac07b" distance={8}/>
+    <pointLight position={[2.7, 2.5, -2]} intensity={30} color="#b3d2c8" distance={9}/>
+    <spotLight position={[0, 6, 3]} angle={.52} penumbra={.85} intensity={65} color="#f8edcc" distance={12}/>
+    <AnimatedPart id="glass" progress={progress} assembled={assembled} selected={selected === 'glass'} onSelect={onSelect} position={[0, 0, 0]} offset={[-.75, 0, 0]}>
+      <mesh castShadow receiveShadow><latheGeometry args={[bottleProfile, 72]}/><meshPhysicalMaterial color={selected === 'glass' ? '#cfe7d4' : '#9ebbb0'} roughness={.08} metalness={.05} transmission={.94} thickness={.32} ior={1.46} transparent opacity={.42} side={2}/></mesh>
+      <mesh position={[0, -.89, 0]}><torusGeometry args={[.54, .035, 16, 72]}/><meshStandardMaterial color="#d9e2d4" metalness={.5} roughness={.2}/></mesh>
+      <mesh position={[0, .25, .681]}><planeGeometry args={[.75, .48]}/><meshStandardMaterial color="#ede5d2" roughness={.65}/></mesh>
+      <mesh position={[0, .25, .695]}><planeGeometry args={[.69, .42]}/><meshStandardMaterial color="#28332c" roughness={.72}/></mesh>
+      <mesh position={[0, .25, .708]}><planeGeometry args={[.018, .31]}/><meshStandardMaterial color="#c3a66b" metalness={.7} roughness={.25}/></mesh>
+    </AnimatedPart>
+    <AnimatedPart id="essence" progress={progress} assembled={assembled} selected={selected === 'essence'} onSelect={onSelect} position={[0, 0, 0]} offset={[0, -1.18, 0]}>
+      <mesh position={[0, -.35, 0]}><cylinderGeometry args={[.535, .57, .92, 64]}/><meshPhysicalMaterial color="#b67336" roughness={.18} metalness={.08} transparent opacity={.84} transmission={.08}/></mesh>
+      <mesh position={[0, .12, 0]}><cylinderGeometry args={[.52, .52, .035, 64]}/><meshStandardMaterial color="#d8a35d" roughness={.2} metalness={.2}/></mesh>
+    </AnimatedPart>
+    <AnimatedPart id="atomizer" progress={progress} assembled={assembled} selected={selected === 'atomizer'} onSelect={onSelect} position={[0, .92, 0]} offset={[1.18, .38, .05]}>
+      <mesh><cylinderGeometry args={[.25, .25, .15, 48]}/><meshStandardMaterial color="#c9a76a" metalness={.78} roughness={.22}/></mesh>
+      <mesh position={[0, -.37, 0]}><cylinderGeometry args={[.035, .035, .62, 20]}/><meshStandardMaterial color="#d6d0bd" metalness={.45} roughness={.24}/></mesh>
+      <mesh position={[0, .15, 0]}><cylinderGeometry args={[.075, .09, .19, 24]}/><meshStandardMaterial color="#e3d5b2" metalness={.62} roughness={.2}/></mesh>
+      <mesh position={[.15, .22, 0]} rotation={[0, 0, -Math.PI / 2]}><cylinderGeometry args={[.055, .07, .32, 24]}/><meshStandardMaterial color="#d9d3c1" metalness={.55} roughness={.2}/></mesh>
+      <mesh position={[.31, .22, 0]} rotation={[0, 0, -Math.PI / 2]}><cylinderGeometry args={[.045, .045, .035, 24]}/><meshStandardMaterial color="#292f2a" roughness={.3}/></mesh>
+    </AnimatedPart>
+    <AnimatedPart id="cap" progress={progress} assembled={assembled} selected={selected === 'cap'} onSelect={onSelect} position={[0, 1.06, 0]} offset={[0, 1.35, 0]}>
+      <mesh castShadow><cylinderGeometry args={[.31, .31, .72, 64, 1]}/><meshStandardMaterial color="#b89b65" metalness={.82} roughness={.25}/></mesh>
+      <mesh position={[0, -.36, 0]}><torusGeometry args={[.28, .028, 14, 64]}/><meshStandardMaterial color="#ead8aa" metalness={.78} roughness={.2}/></mesh>
+      <mesh position={[0, .34, 0]}><cylinderGeometry args={[.29, .31, .045, 64]}/><meshStandardMaterial color="#d1b577" metalness={.8} roughness={.22}/></mesh>
+    </AnimatedPart>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.12, 0]} receiveShadow><planeGeometry args={[100, 100]}/><shadowMaterial transparent opacity={.28}/></mesh>
   </>
-}
-
-class ModelErrorBoundary extends Component<{ children: ReactNode; onFail: () => void }, { failed: boolean }> {
-  state = { failed: false }
-  static getDerivedStateFromError() { return { failed: true } }
-  componentDidCatch(error: Error, _info: ErrorInfo) {
-    console.error('Unable to load the Electric GT model.', error)
-    this.props.onFail()
-  }
-  render() { return this.state.failed ? null : this.props.children }
-}
-
-function ModelFallback() {
-  return <div className="assembly-model-fallback" role="status"><svg viewBox="0 0 900 360" aria-hidden="true"><defs><linearGradient id="carPaint" x1="0" x2="1" y1="0" y2="1"><stop stopColor="#c8d7a2"/><stop offset=".52" stopColor="#748665"/><stop offset="1" stopColor="#34443a"/></linearGradient></defs><ellipse cx="450" cy="295" rx="360" ry="26" fill="#090d0b" opacity=".3"/><path d="M108 234l45-79c15-25 35-39 66-47l118-31c36-9 70-13 107-13h105c43 0 76 11 110 39l75 62 39 23 18 58-45 23H151l-43-20z" fill="url(#carPaint)" stroke="#e0e8c5" strokeOpacity=".45" strokeWidth="3"/><path d="M248 154l126-47c28-9 54-13 85-13h84c32 0 57 8 82 28l52 44H248z" fill="#243532" stroke="#d1dbbd" strokeOpacity=".65" strokeWidth="3"/><path d="M408 97v69m-159-12h428" fill="none" stroke="#d1dbbd" strokeOpacity=".4" strokeWidth="3"/><path d="M129 211l90 1m553 0l66 1" stroke="#f5e4aa" strokeWidth="8" strokeLinecap="round"/><circle cx="257" cy="255" r="55" fill="#151a18"/><circle cx="257" cy="255" r="29" fill="#aeb99a"/><circle cx="257" cy="255" r="11" fill="#3d493e"/><circle cx="665" cy="255" r="55" fill="#151a18"/><circle cx="665" cy="255" r="29" fill="#aeb99a"/><circle cx="665" cy="255" r="11" fill="#3d493e"/></svg><span>3D model unavailable · showing vehicle preview</span></div>
 }
 
 export function ExplodedAssembly() {
   const section = useRef<HTMLElement>(null)
   const reduceMotion = Boolean(useReducedMotion())
   const { scrollYProgress } = useScroll({ target: section, offset: ['start start', 'end end'] })
-  const explodeProgress = useTransform(scrollYProgress, [0, .18, .72, 1], [0, .08, 1, 1])
+  const explodeProgress = useTransform(scrollYProgress, [0, .14, .72, 1], [0, .04, 1, 1])
   const stillProgress = useTransform(scrollYProgress, () => 0)
   const sceneProgress = reduceMotion ? stillProgress : explodeProgress
-  const progressLabel = useTransform(explodeProgress, (value) => `DISASSEMBLY ${Math.round(value * 100)}%`)
-  const [selected, setSelected] = useState<PartId>('body')
+  const progressLabel = useTransform(explodeProgress, (value) => `OPEN ${Math.round(value * 100)}%`)
+  const [selected, setSelected] = useState<PartId>('glass')
   const [assembled, setAssembled] = useState(false)
-  const [modelUnavailable, setModelUnavailable] = useState(false)
-  const [modelLoaded, setModelLoaded] = useState(false)
   const detail = parts.find((part) => part.id === selected) ?? parts[0]
   return <section ref={section} className="assembly-scroll">
     <div className="assembly-stage">
-      <Canvas shadows camera={{ position: [5.1, 3.2, 7.3], fov: 38 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
-        <color attach="background" args={['#151b19']}/><fog attach="fog" args={['#151b19', 13, 32]}/><directionalLight position={[-5, 4, -4]} intensity={1.8} color="#b4c8e4"/><pointLight position={[0, 4, 0]} intensity={16} color="#d7f36c" distance={14}/>
-        <ModelErrorBoundary onFail={() => setModelUnavailable(true)}><Suspense fallback={null}><ImportedCar progress={sceneProgress} assembled={assembled || reduceMotion} selected={selected} onSelect={setSelected} onLoad={() => setModelLoaded(true)}/></Suspense></ModelErrorBoundary>
+      <Canvas shadows camera={{ position: [4.5, 2.7, 6.5], fov: 36 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
+        <BottleScene progress={sceneProgress} assembled={assembled || reduceMotion} selected={selected} onSelect={setSelected}/>
       </Canvas>
-      {!modelLoaded && !modelUnavailable && <div className="assembly-model-loader"><i/>Loading vehicle model</div>}
-      {modelUnavailable && <ModelFallback/>}
       <div className="assembly-vignette"/>
-      <header className="assembly-head"><span>OBJECT STUDY / 014</span><span>SCROLL TO EXPLODE · SELECT A COMPONENT</span></header>
-      <div className="assembly-copy"><span className="eyebrow">ELECTRIC GRAND TOURER · 2026</span><h2>Designed<br/>from the <em>inside.</em></h2><p>Scroll to open up the coupe. Explore its construction, then pull the systems back into one clean silhouette.</p></div>
+      <header className="assembly-head"><span>OBJECT STUDY / 014</span><span>SCROLL TO OPEN · SELECT A COMPONENT</span></header>
+      <div className="assembly-copy"><span className="eyebrow">EAU DE PARFUM · NO. 04</span><h2>A little<br/>closer to <em>essence.</em></h2><p>Scroll to reveal the bottle’s layers. Select a component to inspect it, then bring the fragrance back together.</p></div>
       <aside className="assembly-inspector"><span>COMPONENT / {detail.code}</span><h3>{detail.name}</h3><p>{detail.description}</p><div className="assembly-part-list">{parts.map((part) => <button key={part.id} className={part.id === selected ? 'active' : ''} onClick={() => setSelected(part.id)}><span>{part.code}</span>{part.name}<i>↗</i></button>)}</div></aside>
-      <div className="assembly-controls"><motion.span className="assembly-scroll-label">{assembled ? 'ASSEMBLY RESTORED' : progressLabel}</motion.span><button onClick={() => setAssembled((value) => !value)}>{assembled ? 'Resume scroll reveal' : 'Reassemble car'} <b>{assembled ? '↗' : '↙'}</b></button></div>
-      <footer className="assembly-footer"><span>6 COMPONENTS · 1 COHERENT FORM</span><div><motion.i style={{ scaleX: reduceMotion ? 0 : scrollYProgress, transformOrigin: 'left' }}/></div><a href="https://tevy.dev/models/electric-gt" target="_blank" rel="noreferrer">CC0 ELECTRIC GT · MODEL SOURCE ↗</a></footer>
+      <div className="assembly-controls"><motion.span className="assembly-scroll-label">{assembled ? 'BOTTLE RESTORED' : progressLabel}</motion.span><button onClick={() => setAssembled((value) => !value)}>{assembled ? 'Resume scroll reveal' : 'Reassemble bottle'} <b>{assembled ? '↗' : '↙'}</b></button></div>
+      <footer className="assembly-footer"><span>FOUR LAYERS · ONE SIGNATURE</span><div><motion.i style={{ scaleX: reduceMotion ? 0 : scrollYProgress, transformOrigin: 'left' }}/></div><span>GLASS · ESSENCE · ATOMIZER · BRASS</span></footer>
     </div>
   </section>
 }
