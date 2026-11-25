@@ -1,92 +1,115 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { RoundedBox } from '@react-three/drei'
+import { Center, Environment, Html, RoundedBox, useGLTF } from '@react-three/drei'
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import type { MotionValue } from 'framer-motion'
-import { useRef, useState } from 'react'
+import { Suspense, useMemo, useRef, useState } from 'react'
 import { MathUtils, Vector3 } from 'three'
-import type { Group } from 'three'
+import type { Object3D } from 'three'
 
+const MODEL_URL = 'https://tevy.dev/models/electric-gt/v1/lod1.glb'
 const parts = [
-  { id: 'body', name: 'Aerodynamic body shell', description: 'The sculpted outer panels shape airflow and protect the passenger cabin.', position: [0, .12, 0] as const, offset: [0, 1.65, 0] as const, code: '01' },
-  { id: 'battery', name: 'Electric battery pack', description: 'A structural floor pack stores energy low in the chassis for a balanced ride.', position: [0, -.16, 0] as const, offset: [0, -1.35, 0] as const, code: '02' },
-  { id: 'wheels', name: 'Four-motor wheel set', description: 'Four independent wheel assemblies transfer power and grip to the road.', position: [0, -.2, 0] as const, offset: [2.05, .42, 0] as const, code: '03' },
-  { id: 'cabin', name: 'Panoramic glass cabin', description: 'A lightweight glazed canopy gives the compact coupe an open, bright interior.', position: [0, .78, -.12] as const, offset: [0, 1.35, -.45] as const, code: '04' },
-]
+  { id: 'body', name: 'Grand touring body', description: 'A sculpted electric coupe shell, finished in a deep mineral green with a low, aerodynamic profile.', code: '01' },
+  { id: 'battery', name: 'Skateboard battery', description: 'A structural battery pack sits low beneath the cabin to keep weight balanced and the floor flat.', code: '02' },
+  { id: 'wheels', name: 'Independent wheel units', description: 'Four precision wheel assemblies move outward to reveal the stance, hubs, and braking geometry.', code: '03' },
+  { id: 'spoiler', name: 'Active rear aero', description: 'The rear wing lifts clear of the tail to show how the coupe manages airflow at speed.', code: '04' },
+] as const
 
 type PartId = (typeof parts)[number]['id']
+type MovingNode = { object: Object3D; origin: Vector3; offset: Vector3; category: PartId }
 
-function MovingPart({ id, progress, assembled, selected, onSelect, children, position, offset }: {
-  id: PartId; progress: MotionValue<number>; assembled: boolean; selected: boolean; onSelect: (id: PartId) => void
-  children: React.ReactNode; position: readonly [number, number, number]; offset: readonly [number, number, number]
-}) {
-  const group = useRef<Group>(null)
-  const origin = new Vector3(...position)
-  const exploded = new Vector3(position[0] + offset[0], position[1] + offset[1], position[2] + offset[2])
-  useFrame((_, delta) => {
-    if (!group.current) return
-    const amount = assembled ? 0 : progress.get()
-    const destination = origin.clone().lerp(exploded, amount)
-    group.current.position.x = MathUtils.damp(group.current.position.x, destination.x, 6, delta)
-    group.current.position.y = MathUtils.damp(group.current.position.y, destination.y, 6, delta)
-    group.current.position.z = MathUtils.damp(group.current.position.z, destination.z, 6, delta)
-    const targetScale = selected ? 1.045 : 1
-    group.current.scale.setScalar(MathUtils.damp(group.current.scale.x, targetScale, 5, delta))
+function ImportedCar({ progress, assembled, selected, onSelect }: { progress: MotionValue<number>; assembled: boolean; selected: PartId; onSelect: (id: PartId) => void }) {
+  const root = useRef<Object3D>(null)
+  const battery = useRef<Object3D>(null)
+  const { scene } = useGLTF(MODEL_URL)
+  const model = useMemo(() => {
+    const clone = scene.clone(true)
+    const movingNodes: MovingNode[] = []
+    clone.traverse((node) => {
+      const name = node.name.toLowerCase()
+      const category: PartId | null = /wheel_(fl|fr|rl|rr)|wheel.?[0-9]/.test(name) ? 'wheels' : /spoiler|rear.?wing/.test(name) ? 'spoiler' : null
+      const mesh = node as Object3D & { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }
+      if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true }
+      if (category) {
+        const isLeft = /_(fl|rl)$/.test(name)
+        const isFront = /_(fl|fr)$/.test(name)
+        const signX = isLeft ? -1 : 1
+        const signZ = isFront ? 1 : -1
+        movingNodes.push({
+          object: node,
+          origin: node.position.clone(),
+          offset: category === 'wheels' ? new Vector3(signX * .72, .2, signZ * .32) : new Vector3(0, .85, -.12),
+          category,
+        })
+      }
+    })
+    return { scene: clone, movingNodes }
+  }, [scene])
+
+  useFrame(({ camera }, delta) => {
+    const t = progress.get()
+    const rawAmount = assembled ? 0 : t
+    const amount = rawAmount * rawAmount * (3 - 2 * rawAmount)
+    if (root.current) root.current.rotation.y = MathUtils.damp(root.current.rotation.y, -.22 + t * .44, 2.3, delta)
+    for (const part of model.movingNodes) {
+      const destination = part.origin.clone().addScaledVector(part.offset, amount)
+      part.object.position.lerp(destination, 1 - Math.exp(-delta * 7))
+    }
+    if (battery.current) {
+      const rawAmountDown = assembled ? 0 : t
+      const amountDown = rawAmountDown * rawAmountDown * (3 - 2 * rawAmountDown)
+      battery.current.position.y = MathUtils.damp(battery.current.position.y, -.42 - amountDown * .95, 6, delta)
+      battery.current.scale.setScalar(MathUtils.damp(battery.current.scale.x, selected === 'battery' ? 1.07 : 1, 6, delta))
+    }
+    camera.position.x = MathUtils.damp(camera.position.x, 5.1 - t * 1.3, 2, delta)
+    camera.position.z = MathUtils.damp(camera.position.z, 7.3 + t * .35, 2, delta)
+    camera.lookAt(0, .12, 0)
   })
-  return <group ref={group} position={position} onPointerDown={(event) => { event.stopPropagation(); onSelect(id) }} onPointerOver={(event) => { event.stopPropagation(); document.body.style.cursor = 'pointer' }} onPointerOut={() => { document.body.style.cursor = '' }}>{children}</group>
+
+  const selectFromObject = (object: Object3D) => {
+    const name = object.name.toLowerCase()
+    onSelect(/wheel/.test(name) ? 'wheels' : /spoiler|rear.?wing/.test(name) ? 'spoiler' : 'body')
+  }
+
+  return <>
+    <ambientLight intensity={.72}/><hemisphereLight args={['#e8f0e4', '#1e2924', 1.2]}/><directionalLight position={[4, 8, 6]} intensity={3.1} color="#fff1d7" castShadow/><pointLight position={[-4, 2, -3]} intensity={22} color="#b8d5b8" distance={12}/>
+    <group ref={root}>
+      <Center><primitive object={model.scene} onPointerDown={(event: { stopPropagation: () => void; object: Object3D }) => { event.stopPropagation(); selectFromObject(event.object) }} /></Center>
+      <group ref={battery} position={[0, -.42, 0]} onPointerDown={(event) => { event.stopPropagation(); onSelect('battery') }}>
+        <RoundedBox args={[1.48, .17, 2.85]} radius={.07} smoothness={4} castShadow><meshStandardMaterial color={selected === 'battery' ? '#d7f36c' : '#737c68'} metalness={.62} roughness={.34}/></RoundedBox>
+        <mesh position={[0, .095, 0]}><boxGeometry args={[1.25, .025, 2.5]}/><meshStandardMaterial color="#d2c29a" metalness={.72} roughness={.3}/></mesh>
+      </group>
+    </group>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -.8, 0]} receiveShadow><planeGeometry args={[200, 200]}/><shadowMaterial transparent opacity={.18}/></mesh>
+  </>
 }
 
-function VehicleModel({ progress, assembled, selected, onSelect }: { progress: MotionValue<number>; assembled: boolean; selected: PartId; onSelect: (id: PartId) => void }) {
-  const bodyColor = selected === 'body' ? '#e6edb2' : '#b8c47d'
-  const glassColor = selected === 'cabin' ? '#b7d8d4' : '#829b9b'
-  return <>
-    <ambientLight intensity={.8}/><hemisphereLight args={['#fff6e8', '#484b3d', 1.2]}/><directionalLight position={[4, 7, 5]} intensity={3.6} color="#fff0d2"/><directionalLight position={[-4, 3, -4]} intensity={2.1} color="#c2d5ff"/><pointLight position={[-2, 3, 1]} intensity={20} color="#efc887" distance={10}/>
-    <MovingPart id="battery" progress={progress} assembled={assembled} selected={selected === 'battery'} onSelect={onSelect} position={parts[1].position} offset={parts[1].offset}>
-      <RoundedBox args={[1.8, .28, 3.15]} radius={.12} smoothness={5} position={[0, -.18, 0]} castShadow><meshStandardMaterial color={selected === 'battery' ? '#d7f36c' : '#717a62'} roughness={.55} metalness={.38}/></RoundedBox>
-      {[-1, -.5, 0, .5, 1].map((x) => <mesh key={x} position={[x * .29, -.02, 0]}><boxGeometry args={[.035, .025, 2.65]}/><meshStandardMaterial color="#d1c69f" metalness={.7} roughness={.35}/></mesh>)}
-    </MovingPart>
-    <MovingPart id="body" progress={progress} assembled={assembled} selected={selected === 'body'} onSelect={onSelect} position={parts[0].position} offset={parts[0].offset}>
-      <RoundedBox args={[2.8, .58, 4.5]} radius={.24} smoothness={6} position={[0, .18, 0]} castShadow receiveShadow><meshPhysicalMaterial color={bodyColor} roughness={.24} metalness={.42} clearcoat={.9} clearcoatRoughness={.16}/></RoundedBox>
-      <RoundedBox args={[2.72, .38, 1.15]} radius={.15} smoothness={5} position={[0, .48, -1.45]} castShadow><meshPhysicalMaterial color={bodyColor} roughness={.22} metalness={.38} clearcoat={1}/></RoundedBox>
-      <RoundedBox args={[2.5, .29, .72]} radius={.12} smoothness={4} position={[0, .42, 1.78]} castShadow><meshPhysicalMaterial color={bodyColor} roughness={.25} metalness={.4} clearcoat={.9}/></RoundedBox>
-      {[-1, 1].map((side) => <group key={side}>
-        <mesh position={[side * .94, .27, -2.06]} rotation={[0, side * -.12, 0]}><boxGeometry args={[.46, .12, .035]}/><meshStandardMaterial color="#fff3d0" emissive="#ffe5a6" emissiveIntensity={1.2}/></mesh>
-        <mesh position={[side * .94, .28, 2.22]}><boxGeometry args={[.44, .1, .035]}/><meshStandardMaterial color="#b55447" emissive="#b55447" emissiveIntensity={.5}/></mesh>
-        <mesh position={[side * 1.38, .08, 0]}><boxGeometry args={[.07, .12, 1.35]}/><meshStandardMaterial color="#e4d6b1" metalness={.7} roughness={.3}/></mesh>
-      </group>)}
-    </MovingPart>
-    <MovingPart id="wheels" progress={progress} assembled={assembled} selected={selected === 'wheels'} onSelect={onSelect} position={parts[2].position} offset={parts[2].offset}>
-      {[-1, 1].flatMap((side) => [-1, 1].map((longitudinal) => <group key={`${side}-${longitudinal}`} position={[side * 1.3, -.18, longitudinal * 1.42]} rotation={[0, 0, Math.PI / 2]}>
-        <mesh castShadow><cylinderGeometry args={[.46, .46, .3, 40]}/><meshStandardMaterial color="#272b29" roughness={.82}/></mesh>
-        <mesh position={[side * -.16, 0, 0]}><cylinderGeometry args={[.27, .27, .025, 32]}/><meshStandardMaterial color={selected === 'wheels' ? '#d7f36c' : '#c3b78f'} metalness={.78} roughness={.22}/></mesh>
-        <mesh position={[side * -.18, 0, 0]}><cylinderGeometry args={[.1, .1, .03, 24]}/><meshStandardMaterial color="#5e6555" metalness={.65} roughness={.35}/></mesh>
-      </group>))}
-    </MovingPart>
-    <MovingPart id="cabin" progress={progress} assembled={assembled} selected={selected === 'cabin'} onSelect={onSelect} position={parts[3].position} offset={parts[3].offset}>
-      <RoundedBox args={[1.82, .92, 2.42]} radius={.27} smoothness={8} position={[0, .14, -.15]} castShadow><meshPhysicalMaterial color={glassColor} roughness={.16} metalness={.2} clearcoat={1} transparent opacity={.82}/></RoundedBox>
-      <RoundedBox args={[1.68, .22, 2.05]} radius={.1} smoothness={5} position={[0, .62, -.14]}><meshStandardMaterial color="#313a36" roughness={.32} metalness={.3}/></RoundedBox>
-      {[-1, 1].map((side) => <mesh key={side} position={[side * .82, .11, -.15]}><boxGeometry args={[.07, .8, 2.12]}/><meshStandardMaterial color="#d2c69f" metalness={.64} roughness={.32}/></mesh>)}
-    </MovingPart>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.04, 0]} receiveShadow><planeGeometry args={[200, 200]}/><shadowMaterial transparent opacity={.22}/></mesh>
-  </>
+function ModelLoader() {
+  return <Html center><div className="assembly-model-loader"><i/>Loading vehicle model</div></Html>
 }
 
 export function ExplodedAssembly() {
   const section = useRef<HTMLElement>(null)
   const reduceMotion = Boolean(useReducedMotion())
   const { scrollYProgress } = useScroll({ target: section, offset: ['start start', 'end end'] })
-  const progressLabel = useTransform(scrollYProgress, (value) => `EXPLODED ${Math.round(value * 100)}%`)
+  const explodeProgress = useTransform(scrollYProgress, [0, .18, .72, 1], [0, .08, 1, 1])
+  const stillProgress = useTransform(scrollYProgress, () => 0)
+  const sceneProgress = reduceMotion ? stillProgress : explodeProgress
+  const progressLabel = useTransform(explodeProgress, (value) => `DISASSEMBLY ${Math.round(value * 100)}%`)
   const [selected, setSelected] = useState<PartId>('body')
   const [assembled, setAssembled] = useState(false)
   const detail = parts.find((part) => part.id === selected) ?? parts[0]
   return <section ref={section} className="assembly-scroll">
     <div className="assembly-stage">
-      <Canvas shadows camera={{ position: [5.5, 3.6, 7.3], fov: 37 }} dpr={[1, 1.5]} gl={{ antialias: true }}><color attach="background" args={['#e8e7dd']}/><fog attach="fog" args={['#e8e7dd', 12, 25]}/><VehicleModel progress={scrollYProgress} assembled={assembled || reduceMotion} selected={selected} onSelect={setSelected}/></Canvas>
+      <Canvas shadows camera={{ position: [5.1, 3.2, 7.3], fov: 38 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
+        <color attach="background" args={['#151b19']}/><fog attach="fog" args={['#151b19', 13, 32]}/><Environment preset="studio"/>
+        <Suspense fallback={<ModelLoader/>}><ImportedCar progress={sceneProgress} assembled={assembled || reduceMotion} selected={selected} onSelect={setSelected}/></Suspense>
+      </Canvas>
       <div className="assembly-vignette"/>
-      <header className="assembly-head"><span>MOTION KIT / OBJECT STUDY 14</span><span>SCROLL TO DISASSEMBLE · SELECT A PART</span></header>
-      <div className="assembly-copy"><span className="eyebrow">DESIGN, IN ITS PARTS</span><h2>Every piece<br/>has a <em>purpose.</em></h2><p>Scroll to take the coupe apart. Select any component to inspect its role, then bring the whole object back together.</p></div>
+      <header className="assembly-head"><span>OBJECT STUDY / 014</span><span>SCROLL TO EXPLODE · SELECT A COMPONENT</span></header>
+      <div className="assembly-copy"><span className="eyebrow">ELECTRIC GRAND TOURER · 2026</span><h2>Designed<br/>from the <em>inside.</em></h2><p>Scroll to open up the coupe. Explore its construction, then pull the systems back into one clean silhouette.</p></div>
       <aside className="assembly-inspector"><span>COMPONENT / {detail.code}</span><h3>{detail.name}</h3><p>{detail.description}</p><div className="assembly-part-list">{parts.map((part) => <button key={part.id} className={part.id === selected ? 'active' : ''} onClick={() => setSelected(part.id)}><span>{part.code}</span>{part.name}<i>↗</i></button>)}</div></aside>
-      <div className="assembly-controls"><motion.span className="assembly-scroll-label">{assembled ? 'ASSEMBLY RESTORED' : progressLabel}</motion.span><button onClick={() => setAssembled((value) => !value)}>{assembled ? 'Explode assembly' : 'Reassemble'} <b>{assembled ? '↗' : '↙'}</b></button></div>
-      <footer className="assembly-footer"><span>FOUR INTERCONNECTED SYSTEMS</span><div><motion.i style={{ scaleX: reduceMotion ? 0 : scrollYProgress, transformOrigin: 'left' }}/></div><span>THREE.JS · PRODUCT EXPLORATION</span></footer>
+      <div className="assembly-controls"><motion.span className="assembly-scroll-label">{assembled ? 'ASSEMBLY RESTORED' : progressLabel}</motion.span><button onClick={() => setAssembled((value) => !value)}>{assembled ? 'Resume scroll reveal' : 'Reassemble car'} <b>{assembled ? '↗' : '↙'}</b></button></div>
+      <footer className="assembly-footer"><span>6 COMPONENTS · 1 COHERENT FORM</span><div><motion.i style={{ scaleX: reduceMotion ? 0 : scrollYProgress, transformOrigin: 'left' }}/></div><a href="https://tevy.dev/models/electric-gt" target="_blank" rel="noreferrer">CC0 ELECTRIC GT · MODEL SOURCE ↗</a></footer>
     </div>
   </section>
 }
