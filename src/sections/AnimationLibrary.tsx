@@ -17,7 +17,7 @@ const groups: Record<AnimationCategory, string[]> = {
   basic: ['basic'],
   'framer-motion': ['momentum', 'text-mask', 'panels', 'story', 'layout', 'loader', 'svg-draw', 'magnetic', 'menu', 'image-hover', 'transition', 'text', 'zoom'],
   gsap: ['gsap'],
-  threejs: ['exploded-assembly', 'user-steered-camera', 'typography-camera-move', 'scale-shift-journey', 'day-night-transition', 'map-route-journey', 'architectural-flythrough', 'topdown-reveal', 'camera-roll', 'orbit-editorial', 'portal-worlds', 'diorama-parallax', 'first-person-walk', 'camera-story', 'three-scene', 'particles', 'configurator', 'lens', 'morph', 'sequence'],
+  threejs: ['infinite-carousel', 'image-tube', 'gesture-assembly', 'material-continuity', 'pendulum-study', 'linked-kinetic-chain', 'fracture-reassembly', 'soft-body-jelly', 'paper-fold', 'cloth-drape', 'rigid-body-drop', 'mechanical-sequence', 'xray-cutaway', '3d-2d-handoff', 'exploded-assembly', 'user-steered-camera', 'typography-camera-move', 'scale-shift-journey', 'day-night-transition', 'map-route-journey', 'architectural-flythrough', 'topdown-reveal', 'camera-roll', 'orbit-editorial', 'portal-worlds', 'diorama-parallax', 'first-person-walk', 'camera-story', 'three-scene', 'particles', 'configurator', 'lens', 'morph', 'sequence'],
   mixed: ['webgl-transition', 'fold', 'rail', 'parallax', 'orbit'],
 }
 
